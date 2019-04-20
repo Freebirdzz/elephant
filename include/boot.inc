@@ -20,21 +20,15 @@ DESC_S_DATA equ    DESC_S_CODE
 DESC_S_sys  equ    0_000000000000b
 DESC_TYPE_CODE      equ    1000_00000000b             ;Type类型。参考书153页表格。右边8个零。代码段是可执行，非一致性，不可读，已访问为a清0
 DESC_TYPE_DATA      equ    0010_00000000b             ;数据段；不可执行，向上扩展的，可写，已访问位a清0
-DESC_CODE_HIGH4     equ    (0x00 << 24) + DESC_G_4K + DESC_D_32 + \     ;拼接出代码段高4字节内容
-DESC_L + DESC_AVL + DESC_LIMIT_CODE2 + \
-DESC_P + DESC_DPL_0 + DESC_S_CODE + \
-DESC_TYPE_CODE + 0x00
 
-DESC_DATA_HIGH4     equ    (0x00 << 24) +DESC_G_4K + DESC_D_32 + \      ;拼接数据段高4字节内容
-DESC_L + DESC_AVL + DESC_LIMIT_DATA2 + \
-DESC_P + DESC_DPL_0 + DESC_S_DATA + \
-DESC_TYPE_DATA + 0x00
+;拼接出代码段高4字节内容
+DESC_CODE_HIGH4     equ    (0x00 << 24) + DESC_G_4K + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_CODE2 + DESC_P + DESC_DPL_0 + DESC_S_CODE + DESC_TYPE_CODE + 0x00
 
+;拼接数据段高4字节内容
+DESC_DATA_HIGH4     equ    (0x00 << 24) +DESC_G_4K + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_DATA2 + DESC_P + DESC_DPL_0 + DESC_S_DATA + DESC_TYPE_DATA + 0x00
 
-DESC_VIDEO_HIGH4     equ    (0x00 << 24) +DESC_G_4K + DESC_D_32 + \      ;拼接数据段高4字节内容
-DESC_L + DESC_AVL + DESC_LIMIT_VIDEO2 + \
-DESC_P + DESC_DPL_0 + DESC_S_DATA + \
-DESC_TYPE_DATA + 0x00
+;拼接数据段高4字节内容。书上的内容最后的两个字节是0x00，但是对照163页对于显存放置位置的讲解，应该是0x0B才对,做了修改
+DESC_VIDEO_HIGH4     equ    (0x00 << 24) +DESC_G_4K + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_VIDEO2 + DESC_P + DESC_DPL_0 + DESC_S_DATA + DESC_TYPE_DATA + 0x0b
 
 
 ;---------------------------------- 选择子属性 ------------------------------------
