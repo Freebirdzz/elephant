@@ -2,6 +2,9 @@
 LOADER_BASE_ADDR equ 0x900      ;载入内存中的位置
 LOADER_START_SECTOR equ 0x2     ;存放在硬盘的第二扇区
 
+KERNEL_START_SECTOR   equ   0x9
+KERNEL_BIN_BASE_ADDR   equ  0x70000
+KERNEL_ENTRY_POINT equ    0xc0001500       ;和ld命令链接的kernel的地址是一致的
 ;---------------------------------- gdt描述符属性 ------------------------------------------------------------
 DESC_G_4K   equ    1_00000000000000000000000b         ;在段描述符中，G这个标志位，在高32位中的第23位，也就是它的右边有0-22，一共23个零。
 DESC_D_32   equ    1_0000000000000000000000b          ;D为在高32位中的第22位，也就是它的右边有0-21，一共22个零
@@ -47,3 +50,6 @@ PG_W_R      equ 00b
 PG_RW_W     equ 10b
 PG_US_S     equ     000b
 PG_US_U     equ     100b
+
+;---------------------------- program type 属性  -------------------------------------
+PT_NULL equ 0

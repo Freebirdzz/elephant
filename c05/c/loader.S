@@ -166,6 +166,12 @@ p_mode_start:
     mov gs, ax
 
 
+    ;-------------------------------------  加载kernel  ------------------------------------------
+    mov eax, KERNEL_START_SECTOR    ;kernel.bin 所在的扇区号
+    mov ebx, KERNEL_BIN_BASE_ADDR   ;从磁盘读出后，写入到ebx指定的地址
+    mov ecx, 200                    ;读入的扇区数
+
+    call rd_disk_m_32
     ;创建页目录以及页表并初始化内存位图
     call setup_page
 
@@ -200,9 +206,29 @@ p_mode_start:
     mov byte [gs:166], 't'
     mov byte [gs:168], 'u'
     mov byte [gs:170], 'a'
-    mov byte [gs:172], 'l'   
+    mov byte [gs:172], 'l'
     
-    jmp $
+    jmp SELECTOR_CODE:enter_kernel      
+enter_kernel:
+    mov byte [gs:320], 'k'      ;视频段基址已经被更新，用字符V表示virtual addr
+    mov byte [gs:322], 'e'
+    mov byte [gs:324], 'r'
+    mov byte [gs:326], 'n'
+    mov byte [gs:328], 'a'
+    mov byte [gs:330], 'l'
+    
+    mov byte [gs:480], 'w'
+    mov byte [gs:482], 'h'
+    mov byte [gs:484], 'i'
+    mov byte [gs:486], 'l'
+    mov byte [gs:488], 'e'
+    mov byte [gs:490], '('
+    mov byte [gs:492], '1'
+    mov byte [gs:494], ')'
+    mov byte [gs:496], ';'
+    call kernel_init
+    mov esp, 0xc009f000
+    jmp KERNEL_ENTRY_POINT      ;用地址0x1500访问测试
     
 ;------------------------------ 创建页目录以及页表 ----------------------------------
 setup_page:
@@ -259,3 +285,127 @@ setup_page:
     add eax, 0x1000
     loop .create_kernel_pde
     ret
+
+
+    ;----------------------------  将kernel.bin 中的 segment 拷贝到编译的地址  -------------------------------
+kernel_init:
+    xor eax, eax
+    xor ebx, ebx    ;ebx记录程序头表地址
+    xor ecx, ecx    ;cx记录程序头表中的program header数量
+    xor edx, edx    ;dx记录program header尺寸，即e_phentsize
+
+    mov dx, [KERNEL_BIN_BASE_ADDR + 42]     ;偏移文件42字节处的属性是e_phentsize, 表示program header大小
+    mov ebx, [KERNEL_BIN_BASE_ADDR + 28]    ;偏移文件开始部分呢28字节的地方是e_phoff
+    
+    add ebx, KERNEL_BIN_BASE_ADDR
+    mov cx, [KERNEL_BIN_BASE_ADDR + 44]    ;偏移那件开始部分44字节的地方时e_phnum,表示有几个program header
+
+.each_segment:
+    cmp byte [ebx + 0], PT_NULL     ;若p_type等于PT_NULL，说明此program header未使用
+    je .PTNULL
+
+    ;为函数memcpy压入参数，参数是从右往左依次压入
+    ;函数原型类似于memcpy(dst, src, size)
+    push dword [ebx + 16]
+    ;program header中偏移16字节的地方时p_filesz
+    ;压入函数memcpy的第三个参数：size
+
+    mov eax, [ebx + 4]  ;距离程序头偏移量为4字节的位置是p_offset
+    add eax, KERNEL_BIN_BASE_ADDR
+    ;加上kernel.bin被加载到的物理地址，eax为该段的物理地址
+    push eax        ;压入函数memcpy的第二个参数：原地址
+    push dword [ebx + 8]    ;压入函数memcpy的第一个参数，目的地址偏移程序头8字节位置的是p_vaddr，也就是目的地址
+
+    call mem_cpy            ;调用memcpy完成段复制
+    add esp, 12             ;清理栈中压入的三个参数
+
+.PTNULL:
+    add ebx, edx        ;edx为program header大小，即e_phentsize  在此ebx指向下一个program header
+    loop .each_segment
+    ret
+
+;--------------------- 逐字节拷贝 mem_cpy(dst, src, size) ----------------------------------------
+;输入：栈中三个参数（dst, src, size)
+;输出：无
+;-------------------------------------------------------------------------------------------------
+mem_cpy:
+    cld
+    push ebp
+    mov ebp, esp
+    push ecx        ;rep指令用到了ecx，但ecx对于外层段的循环还有用，所以先入栈备份一下
+
+    mov edi, [ebp + 8]      ;dst
+    mov esi, [ebp + 12]     ;src
+    mov ecx, [ebp + 16]     ;size
+    rep movsb               ;逐个字节拷贝
+
+    ;恢复环境
+    pop ecx
+    pop ebp
+    ret
+
+
+
+;----------------------------------------------------------------------------------------------------
+;功能：读取磁盘n个扇区
+rd_disk_m_32:
+;----------------------------------------------------------------------------------------------------
+
+    mov esi, eax    ;备份eax
+    mov di,cx       ;备份cx
+
+;读写硬盘
+;第一步：设置要读取的扇区数
+    mov dx, 0x1f2
+    mov al, cl
+    out dx, al      ;读取的扇区数
+
+    mov eax, esi    ;恢复ax
+
+;第二步：将LBA的地址存入0x1f3 - 0x1f6
+    mov dx, 0x1f3   ;LBA地址的7-0位写入端口0x1f3
+    out dx, al
+
+    mov cl, 8       ;LBA地址15 - 8 位写入端口0x1f4
+    shr eax, cl     ;逻辑右移指令，
+    mov dx, 0x1f4
+    out dx, al
+
+    shr eax, cl     ;LBA地址23-16 写入端口0x1f5
+    mov dx, 0x1f5
+    out dx, al
+
+    shr eax, cl
+    and al, 0x0f    ;lba第24-27位
+    or al, 0xe0     ;设置 7 - 4位为1110， 表示lba模式
+    mov dx, 0x1f6
+    out dx, al
+
+;第三步：向0x1f7端口写入读命令， 0x20
+    mov dx, 0x1f7
+    mov al, 0x20
+    out dx, al
+
+;第四步：检测硬盘状态
+    .not_ready:
+    ;同一端口，写时表示写入命令字，读时表示读入硬盘状态
+    nop     ;表示空仓操作，什么都不做，相当于sleep了一小段时间
+    in al, dx
+    and al, 0x88    ;第4位为1表示硬盘控制器已经准备好数据传输
+
+    cmp al, 0x08    
+    jnz .not_ready      ;若未准备好，继续等 jnz是一个跳转指令，会结合上一步comp的结果决定
+
+;第五步：从0x1f0端口读数据
+    mov ax, di
+    mov dx, 256
+    mul dx          ;di为要读取的扇区数，一个扇区有512字节，每次读入一个字；共需要di*256次
+    mov cx, ax
+
+    mov dx, 0x1f0
+.go_on_read:
+    in ax, dx
+    mov [ebx], ax
+    add ebx, 2
+    loop .go_on_read
+    ret             ;函数执行结束
